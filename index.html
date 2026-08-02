@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hell Chef — прототип</title>
+<style>
+:root{
+  --coal:#0b0710; --ink:#160d1c; --stone:#2b1a33; --ash:#8c8c9a;
+  --ember:#ff7b2e; --fire:#ff4520; --blood:#b31414; --bone:#f2d3a0; --teal:#4fd6c8; --gold:#ffd447;
+  --paper:#e7d7b6;
+  --display: 'Arial Black','Haettenschweiler','Franklin Gothic Heavy',Impact,sans-serif;
+  --mono: ui-monospace,'Cascadia Mono','DejaVu Sans Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--coal);color:var(--bone);font-family:var(--mono);overflow:hidden}
+#view{position:fixed;inset:0;width:100%;height:100%;image-rendering:pixelated;display:block}
+#ui{position:fixed;inset:0;pointer-events:none;font-size:13px;line-height:1.35}
+#ui button,#ui .chit{pointer-events:auto}
+
+/* HUD */
+.hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;gap:12px;
+  padding:8px 12px;background:linear-gradient(#0b0710f2,#0b071000);}
+.hud-l{min-width:260px;max-width:34vw}
+.hud-r{display:flex;flex-wrap:wrap;gap:4px 14px;justify-content:flex-end;align-items:flex-start;text-align:right}
+.hud-r span{white-space:nowrap;color:#cbb894}
+.hud-r .coin{color:var(--gold)} .hud-r .rep{color:var(--teal)} .hud-r .contract{color:var(--ember)}
+.row{display:flex;gap:8px;margin-bottom:4px}
+.bar{position:relative;flex:1;height:16px;background:#1b1020;border:1px solid #3a2340;overflow:hidden}
+.bar i{position:absolute;inset:0;width:0;display:block}
+.bar b{position:relative;display:block;font-weight:400;font-size:11px;padding:1px 5px;text-shadow:0 1px 0 #000;letter-spacing:.02em}
+.bar.hp i{background:linear-gradient(90deg,#7a0d10,#e0331f)}
+.bar.sp i{background:linear-gradient(90deg,#1d4d4d,#4fd6c8)}
+.bar.xp i{background:linear-gradient(90deg,#4a2c00,#ffb545)}
+.bar.done i{background:linear-gradient(90deg,#5a3a00,#ffd447)}
+.bar.burn i{background:linear-gradient(90deg,#3a0a0a,#ff4520)}
+.bar.skill i{background:linear-gradient(90deg,#33204a,#b06ad6)}
+.bar.rep i{background:linear-gradient(90deg,#173a3a,#4fd6c8)}
+
+/* Рейка заказов — подпись игры: чеки на спице, обугливаются к дедлайну */
+.rail{position:absolute;top:64px;right:12px;width:246px;max-height:70vh;overflow:auto;
+  padding-top:10px;border-top:3px solid #6b5a3a}
+.rail::-webkit-scrollbar{width:6px}.rail::-webkit-scrollbar-thumb{background:#4a3524}
+.rail-title{font-family:var(--display);letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:#9c8a6a;margin-bottom:6px}
+.chit{position:relative;margin:0 0 9px;padding:8px 9px 7px;color:#2a1c10;font-size:12px;
+  background:linear-gradient(var(--paper),var(--paper)) padding-box,
+             linear-gradient(0deg,#1a0d06 0%,#5a2a10 var(--burn,0%),#00000000 calc(var(--burn,0%) + 14%)) border-box;
+  border:6px solid transparent;transform:rotate(-.6deg);
+  box-shadow:0 3px 0 #00000066, inset 0 0 0 1px #00000022}
+.chit:nth-child(odd){transform:rotate(.7deg)}
+.chit::after{content:'';position:absolute;left:0;right:0;bottom:0;height:var(--burn,0%);
+  background:linear-gradient(0deg,#140a04 30%,#7a2a08 70%,#ff7b2e00 100%);opacity:.85;pointer-events:none}
+.chit.hot{animation:emb 1.1s steps(2,end) infinite}
+.chit.over{filter:grayscale(.5) brightness(.7)}
+@keyframes emb{50%{box-shadow:0 3px 0 #00000066,0 0 14px #ff4520aa}}
+.chit-top{display:flex;justify-content:space-between;font-weight:700;gap:6px}
+.chit-top span{color:#7a2a10}
+.chit-dish{font-family:var(--display);text-transform:uppercase;font-size:14px;letter-spacing:.02em;margin:3px 0}
+.chit-bot{display:flex;justify-content:space-between;align-items:center;gap:6px;color:#5b4326}
+
+/* Лог */
+.log{position:absolute;left:12px;bottom:10px;max-width:min(52vw,560px)}
+.log .new{color:var(--bone)} .log .old{color:#6f6357}
+.log .keys{margin-top:6px;color:#5a5060;font-size:11px}
+
+/* Панели */
+.scrim{position:absolute;inset:0;background:#05030899;display:flex;align-items:center;justify-content:center;padding:16px;pointer-events:auto}
+.panel{width:min(860px,96vw);max-height:88vh;overflow:auto;background:
+  linear-gradient(#1a1024,#120a19);border:1px solid #4a2c46;box-shadow:0 0 0 4px #0b0710,0 18px 40px #000a;padding:16px 18px}
+.panel h1{font-family:var(--display);font-size:56px;margin:0;letter-spacing:.04em;color:var(--gold);text-shadow:0 4px 0 var(--blood)}
+.panel h1 span{color:var(--fire)}
+.panel h2{font-family:var(--display);text-transform:uppercase;letter-spacing:.08em;font-size:20px;margin:0 0 6px;color:var(--ember)}
+.panel h2.dead{color:var(--blood)}
+.panel h3{font-family:var(--display);text-transform:uppercase;letter-spacing:.1em;font-size:12px;color:#9c8a6a;margin:12px 0 6px}
+.tag{color:#b8a78c;margin:6px 0 14px;max-width:52ch}
+.sub{color:#9c8a6a;font-size:12px}
+.dim{color:#6f6357}
+.warn{color:var(--fire);font-size:12px}
+.hint{margin:8px 0;padding:6px 8px;border-left:3px solid var(--ember);background:#ff7b2e14}
+.empty{color:#6f6357;padding:8px 0}
+.quote{margin-top:10px;padding:8px 10px;border-left:3px solid var(--teal);background:#4fd6c810;color:#cbb894}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.recs{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;margin-top:10px}
+.rec{border:1px solid #3a2340;padding:8px;background:#00000033}
+.rec.dim{opacity:.55}
+.tier{color:var(--gold)}
+.items{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-top:8px}
+.item{border:1px solid #3a2340;padding:7px;background:#00000033}
+.skill{margin-bottom:5px}
+.stats{display:flex;flex-wrap:wrap;gap:8px;color:#cbb894}
+.rowitem{display:block;width:100%;text-align:left;margin-bottom:5px;padding:6px 8px;background:#00000044;
+  border:1px solid #3a2340;color:var(--bone);font-family:var(--mono);font-size:12px;cursor:pointer}
+.rowitem span{margin-left:8px;color:#cbb894}
+.rowitem:hover{border-color:var(--ember);background:#ff7b2e12}
+.rowitem.on{border-color:var(--teal);background:#4fd6c814}
+.rowitem[disabled]{opacity:.45;cursor:not-allowed}
+.rowbtns{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.btn{font-family:var(--mono);font-size:12px;padding:6px 10px;background:#22142a;color:var(--bone);
+  border:1px solid #4a2c46;cursor:pointer}
+.btn:hover{border-color:var(--ember);color:#fff}
+.btn.primary{background:#3a1206;border-color:var(--fire);color:var(--gold)}
+.btn.danger{border-color:var(--blood);color:#e79a9a}
+.btn.mini{font-size:11px;padding:2px 6px}
+.btn.tall{display:flex;flex-direction:column;gap:3px;align-items:flex-start;min-width:180px;padding:10px}
+.btn.tall b{font-family:var(--display);text-transform:uppercase;letter-spacing:.06em}
+.btn.tall span{color:#9c8a6a}
+.chip{font-family:var(--mono);font-size:11px;padding:3px 7px;margin:2px 4px 2px 0;background:#22142a;
+  border:1px solid #4a2c46;color:#cbb894;cursor:pointer}
+.chip.on{border-color:var(--teal);color:var(--teal)}
+.spices{margin-top:8px}
+.heat{position:relative;height:22px;background:#1b1020;border:1px solid #3a2340;margin:8px 0}
+.heat-band{position:absolute;top:0;bottom:0;background:#3aa03a44;border-left:1px solid #7fd45a;border-right:1px solid #7fd45a}
+.heat-fill{position:absolute;top:0;bottom:0;left:0;background:linear-gradient(90deg,#5a2d0b,#ff4520)}
+.heat b{position:relative;display:block;font-weight:400;font-size:11px;padding:3px 6px;text-shadow:0 1px 0 #000}
+.panel-foot{margin-top:14px;border-top:1px solid #3a2340;padding-top:10px}
+@media (max-width:760px){
+  .rail{width:180px;top:88px} .hud{flex-direction:column;gap:4px} .hud-l{max-width:none}
+  .cols{grid-template-columns:1fr} .panel h1{font-size:38px} .log{max-width:60vw}
+}
+@media (prefers-reduced-motion:reduce){ .chit.hot{animation:none} }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="ui"></div>
+<script src="bundle.js"></script>
+</body>
+</html>

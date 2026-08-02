@@ -1,0 +1,19 @@
+{
+  "name": "hell-chef",
+  "version": "0.1.0",
+  "description": "Hell Chef — кулинарный roguelike, прототип на TypeScript + WebGL2",
+  "main": "index.js",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --minify --target=es2020 --outfile=dist/bundle.js && node -e \"require('fs').copyFileSync('index.html','dist/index.html')\"",
+    "dev": "esbuild src/main.ts --bundle --sourcemap --target=es2020 --outfile=dist/bundle.js --watch --servedir=.",
+    "check": "tsc --noEmit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "typescript": "^7.0.2"
+  },
+  "private": true
+}
