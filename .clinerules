@@ -2,9 +2,9 @@
 
 ## Project Context
 - TypeScript + WebGL2 кулинарный roguelike прототип
-- Сборка: esbuild (`npm run build` → dist/bundle.js, `npm run dev` — watch + serve)
+- Сборка: Vite (`npm run dev` — dev-сервер, `npm run build` — продакшен в docs/)
 - Типизация: `tsc --noEmit` (strict)
-- Деплой: GitHub Pages из папки docs/
+- Деплой: GitHub Pages из папки docs/ через GitHub Actions
 
 ## Code Style
 - Используй camelCase для переменных и функций
@@ -29,19 +29,21 @@
 - `src/progress.ts` — прогресс, мета-прогрессия
 - `src/world.ts` — мир, уровни
 - `src/main.ts` — точка входа
+- `vite.config.ts` — конфигурация Vite (outDir: docs, base: /HellCheef/)
 
 ## Build
-- `npm run build` — сборка в dist/ (бандл + index.html)
-- `npm run dev` — esbuild watch + serve из корня (index.html ссылается на dist/bundle.js)
+- `npm run dev` — Vite dev-сервер с HMR
+- `npm run build` — `tsc --noEmit && vite build` → docs/ (минифицированный бандл)
+- `npm run preview` — превью продакшен-билда
 - `npm run check` — проверка типов TypeScript
 
 ## Deployment
-- GitHub Pages деплоится из docs/ через GitHub Actions
-- В docs/ лежат index.html + bundle.js
-- Не коммитить dist/ — он в .gitignore, только docs/
+- GitHub Pages деплоится из docs/ через GitHub Actions (`.github/workflows/deploy.yml`)
+- Vite билдит в `docs/`, GitHub Actions забирает артефакт и деплоит
+- docs/ в .gitignore — не коммитится, генерируется в CI
+- `base: '/HellCheef/'` в vite.config.ts для корректных путей на Pages
 
 ## Rules
 - Не меняй сигнатуры экспортируемых функций без необходимости
 - При добавлении новых файлов — обновляй этот список
 - Перед коммитом всегда прогоняй `npm run check`
-- Держи bundle.js минифицированным в docs/
