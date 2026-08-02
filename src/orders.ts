@@ -17,8 +17,8 @@ export function deadlineFor(r: RecipeDef, c: CustomerDef) {
   const patienceF = 0.85 + (c.patience / 100) * 0.95;
   const complexity = r.difficulty / 100;
   const raw = r.time * (1 + 0.7 * complexity) * patienceF / c.urgency;
-  const floor = Math.round(r.time * 1.7) + 14;
-  return Math.max(floor, Math.round(raw) + 14);
+  const floor = Math.round(r.time * 2.5) + 30;
+  return Math.max(floor, Math.round(raw) + 20);
 }
 
 export function pickOrder(rng: RNG, circle: number, known: string[], p: Player, turn: number): Order {
@@ -87,7 +87,7 @@ export function serveOrder(o: Order, dish: Extract<Item, { kind: 'dish' }>, p: P
 
 export function expireOrders(orders: Order[], p: Player, turn: number, log: (s: string) => void) {
   for (const o of orders) {
-    if (o.state !== 'active' || turn <= o.deadline + 10) continue;
+    if (o.state !== 'active' || turn <= o.deadline + 20) continue;
     o.state = 'failed';
     p.ordersFailed++;
     addRep(p, o.cust.faction, -35);

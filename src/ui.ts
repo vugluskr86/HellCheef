@@ -112,15 +112,17 @@ function handle(act: string, arg = '') {
       const o = g.orders.find(x => x.id === sel.order);
       const dish = g.player.inv[+arg];
       if (!o || !dish || dish.kind !== 'dish') break;
+      if (o.state !== 'active') { say(g, 'Этот заказ уже закрыт.'); break; }
       const res = serveOrder(o, dish, g.player, g.turn);
       removeQty(g.player, dish, 1);
       grantXP(g.player, res.xp, s => say(g, s));
       if (res.ok && res.q >= g.contract.minQ) {
         g.contract.done++;
-        if (g.contract.done === g.contract.need) say(g, 'Контракт круга выполнен — врата открыты.');
+        if (g.contract.done >= g.contract.need) say(g, 'Контракт круга выполнен — врата открыты.');
       }
       say(g, res.text);
       checkDiscoveries(g);
+      sel.order = -1; // сброс — заказ закрыт
       advance(g, 2);
       break;
     }
@@ -330,6 +332,8 @@ function cookPanel(g: Game) {
 function servePanel(g: Game) {
   const act = g.orders.filter(o => o.state === 'active');
   const dishes = g.player.inv.map((it, i) => ({ it, i })).filter(x => x.it.kind === 'dish');
+  // Авто-выбор первого активного заказа, если ничего не выбрано или выбран закрытый
+  if (!act.find(x => x.id === sel.order)) sel.order = act.length ? act[0].id : -1;
   const o = g.orders.find(x => x.id === sel.order);
   return `<h2>Стойка выдачи</h2>
   <div class="cols">
