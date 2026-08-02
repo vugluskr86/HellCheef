@@ -1,0 +1,47 @@
+# Hell Chef — Cline Rules
+
+## Project Context
+- TypeScript + WebGL2 кулинарный roguelike прототип
+- Сборка: esbuild (`npm run build` → dist/bundle.js, `npm run dev` — watch + serve)
+- Типизация: `tsc --noEmit` (strict)
+- Деплой: GitHub Pages из папки docs/
+
+## Code Style
+- Используй camelCase для переменных и функций
+- Типы и интерфейсы в PascalCase
+- Константы в UPPER_SNAKE_CASE
+- Комментарии на русском (язык проекта)
+- Избегай any — используй точные типы из src/types.ts
+
+## Project Structure
+- `src/types.ts` — общие типы (Ingredient, Recipe, Dish, Order, LevelDef…)
+- `src/data.ts` — статические данные (ингредиенты, рецепты, уровни)
+- `src/core.ts` — ядро (GameState, фабрики, инициализация)
+- `src/game.ts` — основной игровой цикл, диспетчер экранов
+- `src/atlas.ts` — текстурный атлас
+- `src/render.ts` / `src/gl.ts` — WebGL2 рендеринг
+- `src/ui.ts` — DOM-интерфейс (HUD, панели, заказы)
+- `src/economy.ts` — экономика, цены, прокачка
+- `src/cooking.ts` — процесс готовки, комбинации ингредиентов
+- `src/orders.ts` — система заказов, чеков (chit)
+- `src/combat.ts` — боевая система
+- `src/inv.ts` — инвентарь
+- `src/progress.ts` — прогресс, мета-прогрессия
+- `src/world.ts` — мир, уровни
+- `src/main.ts` — точка входа
+
+## Build
+- `npm run build` — сборка в dist/ (бандл + index.html)
+- `npm run dev` — esbuild watch + serve из корня (index.html ссылается на dist/bundle.js)
+- `npm run check` — проверка типов TypeScript
+
+## Deployment
+- GitHub Pages деплоится из docs/ через GitHub Actions
+- В docs/ лежат index.html + bundle.js
+- Не коммитить dist/ — он в .gitignore, только docs/
+
+## Rules
+- Не меняй сигнатуры экспортируемых функций без необходимости
+- При добавлении новых файлов — обновляй этот список
+- Перед коммитом всегда прогоняй `npm run check`
+- Держи bundle.js минифицированным в docs/
