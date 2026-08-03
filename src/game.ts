@@ -9,6 +9,7 @@ import { expireOrders, nextOrderDelay, pickOrder } from './orders';
 import { absorbRun, loadMeta, saveMeta } from './progress';
 import { Item, Level, Meta, Order, Player, SkillId, Station } from './types';
 import { CIRCLE_NAMES, makeCave, makeHub, passable, tileAt } from './world';
+import { createTutorialState, TUTORIAL_CONFIG, TutorialState } from './tutorial';
 
 export type Mode = 'world' | 'cook' | 'shop' | 'inv' | 'serve' | 'menu' | 'dead' | 'char' | 'recipes' | 'start';
 
@@ -22,7 +23,7 @@ export interface Game {
   known: string[]; meta: Meta;
   log: string[]; mode: Mode; cook: CookSession | null;
   contract: Contract; dead: boolean; lastDayTick: number;
-  station: Station | null; flash: string;
+  station: Station | null; flash: string; tutorial: TutorialState;
 }
 
 export const ARCHETYPES = [
@@ -68,8 +69,14 @@ export function newGame(archId = 'butcher', seed = Date.now() >>> 0): Game {
     known: [...new Set([...STARTER_RECIPES, ...meta.recipes])],
     meta, log: [], mode: 'world', cook: null,
     contract: contractFor(circle), dead: false, lastDayTick: 0,
-    station: null, flash: '',
+    station: null, flash: '', tutorial: createTutorialState(TUTORIAL_CONFIG),
   };
+  // Первый заказ выдаётся сразу: он знакомит игрока с рейкой заказов и
+  // даёт туториалу конкретную станцию, к которой нужно направить повара.
+  const firstOrder = pickOrder(g.rng, g.circle, g.known, g.player, g.turn);
+  g.orders.push(firstOrder);
+  g.nextOrderAt = g.turn + nextOrderDelay(g.rng, g.turn, g.player.global);
+  say(g, `Первый заказ: ${firstOrder.cust.name} — «${firstOrder.recipe.name}».`);
   say(g, `Круг ${circle}. ${CIRCLE_NAMES[0]}. Ты — повар, и это твой единственный способ не стать блюдом.`);
   say(g, `Контракт круга: ${g.contract.need} заказа с качеством ${g.contract.minQ}+.`);
   return g;
@@ -298,6 +305,7 @@ export function loadGame(): Game | null {
     const d = JSON.parse(outer.data);
     const g = newGame('butcher', d.seed);
     g.turn = d.turn; g.circle = d.circle; g.depth = d.depth; g.lastDayTick = d.lastDayTick;
+    g.tutorial = createTutorialState(TUTORIAL_CONFIG);
     g.hub = makeHub(g.circle, new RNG(d.seed + g.circle));
     g.level = g.hub;
     g.player = { ...d.player, inv: d.player.inv.map(deItem), weapon: d.player.weapon ? deItem(d.player.weapon) : null };

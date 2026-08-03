@@ -14,9 +14,23 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--coal);color:var(--bone);font-family:var(--mono);overflow:hidden}
-#view{position:fixed;inset:0;width:100%;height:100%;image-rendering:pixelated;display:block}
+#view{position:fixed;inset:0;width:100%;height:100%;image-rendering:pixelated;display:block;touch-action:none}
 #ui{position:fixed;inset:0;pointer-events:none;font-size:13px;line-height:1.35}
 #ui button,#ui .chit{pointer-events:auto}
+
+.tutorial-layer{position:absolute;inset:0;pointer-events:none;z-index:40}
+.tutorial-focus{position:absolute;pointer-events:none;border:2px solid var(--gold);box-shadow:0 0 0 9999px rgba(10,8,12,.72),0 0 24px rgba(255,212,71,.7);border-radius:10px;z-index:41}
+.tutorial-focus::before{content:'▼';position:absolute;left:50%;top:-32px;transform:translateX(-50%);color:var(--gold);font:32px/1 var(--display);text-shadow:0 2px 0 #000;animation:tutorialPoint .75s ease-in-out infinite alternate}
+.tutorial-world-pointer{display:none;position:absolute;pointer-events:none;z-index:43;transform:translate(-50%,-145%);color:var(--gold);font:36px/1 var(--display);text-shadow:0 3px 0 #000,0 0 12px var(--ember);filter:drop-shadow(0 0 5px rgba(255,212,71,.9))}
+.tutorial-world-pointer::before{content:'▼';display:block;animation:tutorialWorldPoint .7s ease-in-out infinite alternate}
+.tutorial-card{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);width:min(420px,calc(100vw - 20px));padding:12px 14px;background:rgba(18,10,25,.92);border:1px solid rgba(255,212,71,.3);box-shadow:0 20px 30px rgba(0,0,0,.35);pointer-events:auto;z-index:42}
+.tutorial-title{font-family:var(--display);text-transform:uppercase;letter-spacing:.08em;font-size:12px;color:var(--gold);margin-bottom:6px}
+.tutorial-body{color:#e8dbb7;font-size:12px;line-height:1.5}
+.tutorial-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+.tutorial-target{outline:2px solid var(--gold);outline-offset:2px;box-shadow:0 0 14px rgba(255,212,71,.45);animation:tutorialTarget .9s ease-in-out infinite alternate}
+@keyframes tutorialPoint{to{transform:translate(-50%,7px)}}
+@keyframes tutorialTarget{to{box-shadow:0 0 24px rgba(255,212,71,.9)}}
+@keyframes tutorialWorldPoint{to{transform:translateY(11px)}}
 
 /* HUD */
 .hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;gap:12px;
@@ -117,9 +131,17 @@ html,body{margin:0;height:100%;background:var(--coal);color:var(--bone);font-fam
   .rail{width:180px;top:88px} .hud{flex-direction:column;gap:4px} .hud-l{max-width:none}
   .cols{grid-template-columns:1fr} .panel h1{font-size:38px} .log{max-width:60vw}
 }
-@media (prefers-reduced-motion:reduce){ .chit.hot{animation:none} }
+/* Раскладки для сенсорных экранов: значение выставляет src/mobile.ts. */
+html[data-mobile-orientation="portrait"] .hud{flex-direction:column;gap:4px;padding:7px 8px}
+html[data-mobile-orientation="portrait"] .hud-l{max-width:none;min-width:0}
+html[data-mobile-orientation="portrait"] .hud-r{justify-content:flex-start;text-align:left;gap:2px 10px}
+html[data-mobile-orientation="portrait"] .rail{top:96px;right:8px;width:min(45vw,184px);max-height:45vh}
+html[data-mobile-orientation="portrait"] .log{left:8px;bottom:8px;max-width:60vw}
+html[data-mobile-orientation="portrait"] .panel{width:min(96vw,560px);max-height:84vh;padding:14px}
+html[data-mobile-orientation="landscape"] .rail{top:64px;right:12px;width:246px;max-height:70vh}
+@media (prefers-reduced-motion:reduce){ .chit.hot,.tutorial-focus::before,.tutorial-world-pointer::before,.tutorial-target{animation:none} }
 </style>
-  <script type="module" crossorigin src="/HellCheef/assets/index-DK7_QLXJ.js"></script>
+  <script type="module" crossorigin src="/HellCheef/assets/index-CIpozIfj.js"></script>
 </head>
 <body>
 <canvas id="view"></canvas>

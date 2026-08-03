@@ -3,6 +3,7 @@ import { AtlasData, CELL } from './atlas';
 import { Batch } from './gl';
 import { isNight } from './core';
 import { Game } from './game';
+import { tutorialWorldTarget } from './tutorial';
 import { Level } from './types';
 
 const CUSTOMER_TINT: Record<string, [number, number, number]> = {
@@ -139,6 +140,12 @@ export class Renderer {
 
     // Свечение и искры — аддитивно.
     b.setBlend('add');
+    const tutorialTarget = tutorialWorldTarget(g);
+    if (tutorialTarget) {
+      const pulse = 0.34 + Math.sin(t / 170) * 0.12;
+      b.draw(this.idx.glow, (tutorialTarget.x - 1.5) * CELL, (tutorialTarget.y - 1.5) * CELL, CELL * 4, CELL * 4, 1, 0.78, 0.12, pulse);
+      b.draw(this.idx.spark, tutorialTarget.x * CELL, tutorialTarget.y * CELL - CELL * 1.35, CELL, CELL, 1, 0.84, 0.2, 0.95);
+    }
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       const tile = l.tiles[y * l.w + x];
       if (tile === 2) {

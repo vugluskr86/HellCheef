@@ -1,5 +1,6 @@
 // Интерфейс: HUD, рейка заказов, панели готовки/лавки/инвентаря. Всё на DOM поверх WebGL.
 import { clamp, clockOf, dayOf } from './core';
+import { CELL } from './atlas';
 import { cookStep, cookXP, dishItem, finishCook, heatHigh, heatLow, startCook } from './cooking';
 import { FACTION_NAMES, ingById, RECIPES, SKILL_NAMES, STATION_NAMES, recipeById, toolById } from './data';
 import { ARCHETYPES, Game, advance, checkDiscoveries, hasSave, interact, loadGame, move, newGame, repairStation, rest, saveGame, say, shopStock, toolStock, upgradeStation } from './game';
@@ -7,10 +8,14 @@ import { addItem, itemName, makeIng, makeTool, MAX_WEIGHT, planIngredients, remo
 import { serveOrder } from './orders';
 import { grantXP, karmaTitle, MAX_LEVEL, repTitle, xpToNext } from './progress';
 import { Item } from './types';
+import { currentTutorialStep, getTutorialStepMarkup, setTutorialEnabled, advanceTutorial, tutorialWorldTarget } from './tutorial';
+import { initTouchControls } from './mobile';
 
 export const app: { g: Game } = { g: null! };
 let root: HTMLElement;
+let worldCanvas: HTMLElement | null = null;
 let sel = { order: -1, spice: 0 };
+let lastTouchActionAt = 0;
 
 const esc = (s: string) => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!));
 const bar = (v: number, max: number, cls: string, label = '') =>
@@ -18,11 +23,21 @@ const bar = (v: number, max: number, cls: string, label = '') =>
 const btn = (act: string, text: string, arg = '', cls = '') =>
   `<button class="btn ${cls}" data-act="${act}" data-arg="${esc(String(arg))}">${text}</button>`;
 
-export function initUI(el: HTMLElement) {
+export function initUI(el: HTMLElement, touchTarget?: HTMLElement) {
   root = el;
+  worldCanvas = touchTarget ?? null;
   el.addEventListener('click', e => {
+    if (performance.now() - lastTouchActionAt < 500) return;
     const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
     if (!t) return;
+    handle(t.dataset.act!, t.dataset.arg ?? '');
+  });
+  el.addEventListener('pointerup', e => {
+    if (e.pointerType !== 'touch') return;
+    const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
+    if (!t) return;
+    e.preventDefault();
+    lastTouchActionAt = performance.now();
     handle(t.dataset.act!, t.dataset.arg ?? '');
   });
   window.addEventListener('keydown', e => {
@@ -49,6 +64,20 @@ export function initUI(el: HTMLElement) {
     else if (k === 'r' || k === 'к') { g.mode = 'recipes'; render(); }
     else if (k === ' ') { e.preventDefault(); advance(g, 1); render(); }
   });
+  if (touchTarget) initTouchControls(touchTarget, {
+    move: (dx, dy) => {
+      const g = app.g;
+      if (!g || g.mode !== 'world') return;
+      move(g, dx, dy);
+      render();
+    },
+    interact: () => {
+      const g = app.g;
+      if (!g || g.mode !== 'world') return;
+      interact(g);
+      render();
+    },
+  });
 }
 
 function cookKeys(k: string, e: KeyboardEvent) {
@@ -58,7 +87,12 @@ function cookKeys(k: string, e: KeyboardEvent) {
     return;
   }
   e.preventDefault();
-  const m: Record<string, string> = { q: 'heat_up', й: 'heat_up', e: 'heat_down', у: 'heat_down', f: 'flip', а: 'flip', s: 'season', ы: 'season', ' ': 'wait', enter: 'finish' };
+  const m: Record<string, string> = {
+    q: 'heat_up', й: 'heat_up', e: 'heat_down', у: 'heat_down',
+    f: g.cook.technique === 'slice' ? 'slice' : g.cook.technique === 'mix' ? 'stir' : 'flip',
+    а: g.cook.technique === 'slice' ? 'slice' : g.cook.technique === 'mix' ? 'stir' : 'flip',
+    s: 'season', ы: 'season', ' ': 'wait', enter: 'finish',
+  };
   if (m[k]) handle('cook_' + m[k]);
   else if (k === 'escape') handle('cook_abort');
 }
@@ -67,11 +101,30 @@ function cookKeys(k: string, e: KeyboardEvent) {
 function handle(act: string, arg = '') {
   const g = app.g;
   switch (act) {
-    case 'newgame': app.g = newGame(arg); break;
+    case 'newgame': {
+      const tutorial = app.g?.tutorial;
+      // При выборе класса сохраняем текущий учебный прогресс, а не создаём
+      // подсказки заново. Если игрок пропустил карточку выбора, пропускаем её
+      // автоматически и переходим к подсказке о заказах.
+      if (tutorial && app.g?.mode === 'start') {
+        advanceTutorial(tutorial, app.g);
+        advanceTutorial(tutorial, app.g);
+      }
+      app.g = newGame(arg);
+      if (tutorial) app.g.tutorial = tutorial;
+      break;
+    }
     case 'continue': { const l = loadGame(); if (l) app.g = l; else say(g, 'Сохранение не найдено.'); break; }
     case 'save': say(g, saveGame(g) ? 'Сохранено.' : 'Не удалось сохранить.'); break;
     case 'close': g.mode = 'world'; g.station = null; break;
     case 'open': g.mode = arg as any; break;
+    case 'tutorial_toggle':
+      setTutorialEnabled(g.tutorial, !g.tutorial.enabled);
+      say(g, g.tutorial.enabled ? 'Подсказки включены.' : 'Подсказки отключены.');
+      break;
+    case 'tutorial_next':
+      advanceTutorial(g.tutorial, g);
+      break;
     case 'rest': rest(g); break;
     case 'repair': repairStation(g, g.station!); break;
     case 'upgrade': upgradeStation(g, g.station!); break;
@@ -83,7 +136,7 @@ function handle(act: string, arg = '') {
       else { g.cook = res; say(g, `Начал готовить «${r.name}».`); }
       break;
     }
-    case 'cook_heat_up': case 'cook_heat_down': case 'cook_flip': case 'cook_wait': case 'cook_season': {
+    case 'cook_heat_up': case 'cook_heat_down': case 'cook_flip': case 'cook_slice': case 'cook_stir': case 'cook_wait': case 'cook_season': {
       const s = g.cook!;
       const sp = act === 'cook_season' ? (spices(g.player)[sel.spice] ?? null) : null;
       if (act === 'cook_season' && !sp) { say(g, 'Специй нет.'); break; }
@@ -216,8 +269,72 @@ function finishSession(keep: boolean) {
 export function render() {
   const g = app.g;
   if (!g) return;
-  if (g.mode === 'start') { root.innerHTML = startScreen(); return; }
-  root.innerHTML = hud(g) + chits(g) + logBox(g) + modal(g);
+  if (g.mode === 'start') {
+    root.innerHTML = startScreen() + tutorialOverlay(g);
+    syncTutorialHighlight();
+    return;
+  }
+  root.innerHTML = hud(g) + chits(g) + logBox(g) + modal(g) + tutorialOverlay(g);
+  syncTutorialHighlight();
+}
+
+function syncTutorialHighlight() {
+  const g = app.g;
+  const step = currentTutorialStep(g.tutorial, g);
+  if (!g.tutorial.enabled || !step) return;
+  const focus = root.querySelector('#tutorial-focus') as HTMLElement | null;
+  const target = step.selector ? root.querySelector(step.selector) as HTMLElement | null : null;
+  if (focus) {
+    if (target) {
+      const rect = target.getBoundingClientRect();
+      const rootRect = root.getBoundingClientRect();
+      focus.style.display = 'block';
+      focus.style.left = `${rect.left - rootRect.left - 12}px`;
+      focus.style.top = `${rect.top - rootRect.top - 12}px`;
+      focus.style.width = `${rect.width + 24}px`;
+      focus.style.height = `${rect.height + 24}px`;
+      target.classList.add('tutorial-target');
+    } else focus.style.display = 'none';
+  }
+
+  const pointer = root.querySelector('#tutorial-world-pointer') as HTMLElement | null;
+  const worldTarget = tutorialWorldTarget(g);
+  if (!pointer || !worldCanvas || !worldTarget) {
+    if (pointer) pointer.style.display = 'none';
+    return;
+  }
+  const point = worldTargetScreenPoint(g, worldCanvas, worldTarget.x, worldTarget.y);
+  pointer.style.display = 'block';
+  pointer.style.left = `${point.x}px`;
+  pointer.style.top = `${point.y}px`;
+}
+
+function worldTargetScreenPoint(g: Game, canvas: HTMLElement, x: number, y: number) {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const width = canvas.clientWidth * dpr;
+  const height = canvas.clientHeight * dpr;
+  const scale = Math.max(2, Math.min(6, Math.floor(Math.min(width / (26 * CELL), height / (17 * CELL)))));
+  const vw = width / scale, vh = height / scale;
+  let camX = (g.player.x + 0.5) * CELL - vw / 2;
+  let camY = (g.player.y + 0.5) * CELL - vh / 2;
+  camX = Math.max(-8, Math.min(g.level.w * CELL - vw + 8, camX));
+  camY = Math.max(-8, Math.min(g.level.h * CELL - vh + 8, camY));
+  if (g.level.w * CELL < vw) camX = (g.level.w * CELL - vw) / 2;
+  if (g.level.h * CELL < vh) camY = (g.level.h * CELL - vh) / 2;
+  return {
+    x: ((x + 0.5) * CELL - camX) * scale / dpr,
+    y: (y * CELL - camY) * scale / dpr,
+  };
+}
+
+function tutorialOverlay(g: Game) {
+  const step = currentTutorialStep(g.tutorial, g);
+  if (!g.tutorial.enabled || !step) return '';
+  return `<div class="tutorial-layer" aria-live="polite">
+    <div id="tutorial-focus" class="tutorial-focus"></div>
+    <div id="tutorial-world-pointer" class="tutorial-world-pointer" aria-hidden="true"></div>
+    ${getTutorialStepMarkup(step)}
+  </div>`;
 }
 
 function hud(g: Game) {
@@ -245,7 +362,7 @@ function chits(g: Game) {
     const total = o.deadline - o.placedTurn;
     const frac = clamp(left / total, 0, 1);
     const state = left < 0 ? 'over' : frac < 0.3 ? 'hot' : '';
-    return `<div class="chit ${state}" style="--burn:${(1 - frac) * 100}%">
+    return `<div class="chit ${state}" data-tutorial="order-card" style="--burn:${(1 - frac) * 100}%">
       <div class="chit-top"><b>${esc(o.cust.name)}</b><span>${left < 0 ? 'ПРОСРОЧЕН' : left + ' ход.'}</span></div>
       <div class="chit-dish">${esc(o.recipe.name)}</div>
       <div class="chit-bot"><span>кач. ${o.minQuality}+</span><span>~${o.reward}💰</span>${btn('refuse', 'отказать', String(o.id), 'mini')}</div>
@@ -256,7 +373,7 @@ function chits(g: Game) {
 function logBox(g: Game) {
   const last = g.log.slice(-4).reverse();
   return `<div class="log">${last.map((l, i) => `<div class="${i ? 'old' : 'new'}">${esc(l)}</div>`).join('')}
-    <div class="keys">WASD — идти · E — действие · I — сумка · C — герой · R — рецепты · F5 — сохранить</div></div>`;
+    <div class="keys">Свайп — идти · тап по полю — действие · WASD/E/I/C/R · F5 — сохранить</div></div>`;
 }
 
 function modal(g: Game) {
@@ -291,7 +408,7 @@ function stationPanel(g: Game) {
   return `<h2>${STATION_NAMES[st.id]} <span class="tier">ур. ${st.tier}</span></h2>
     <div class="sub">Износ: ${Math.round(st.dur)}% ${st.dur < 40 ? '— качество падает, случаются сбои' : ''}</div>
     <div class="rowbtns">${btn('repair', `Починить (${Math.round((100 - st.dur) * 3.5)}💰)`)}${st.tier < 3 ? btn('upgrade', `Улучшить (${400 * st.tier}💰)`) : ''}</div>
-    <div class="recs">${rows || '<div class="empty">Для этой станции пока нет освоенных рецептов.</div>'}</div>`;
+    <div class="recs" data-tutorial="station-button">${rows || '<div class="empty">Для этой станции пока нет освоенных рецептов.</div>'}</div>`;
 }
 
 const recipeNeedName = (id: string) => ingById(id).name;
@@ -301,13 +418,15 @@ function tagName(t: string) {
 
 function cookPanel(g: Game) {
   const s = g.cook!, r = s.recipe;
+  if (s.technique === 'slice') return slicePanel(g);
+  if (s.technique === 'mix') return mixPanel(g);
   const lo = heatLow(r), hi = heatHigh(r);
   const sp = spices(g.player);
   if (sel.spice >= sp.length) sel.spice = 0;
   const heatPct = r.idealHeat > 0 ? clamp(s.heat / (r.idealHeat * 2), 0, 1) * 100 : 0;
   const bandL = r.idealHeat > 0 ? clamp(lo / (r.idealHeat * 2), 0, 1) * 100 : 0;
   const bandW = r.idealHeat > 0 ? clamp((hi - lo) / (r.idealHeat * 2), 0, 1) * 100 : 100;
-  return `<h2>${esc(r.name)}</h2>
+  return `<h2 data-tutorial="cook-panel">${esc(r.name)}</h2>
   <div class="sub">${STATION_NAMES[r.station]} · ${s.usedNames.join(', ')}</div>
   ${r.idealHeat > 0 ? `<div class="heat">
     <div class="heat-band" style="left:${bandL}%;width:${bandW}%"></div>
@@ -329,13 +448,44 @@ function cookPanel(g: Game) {
     ${sp.length ? btn('cook_season', 'Добавить (S)') : ''}</div>`;
 }
 
+function slicePanel(g: Game) {
+  const s = g.cook!, r = s.recipe;
+  return `<h2 data-tutorial="cook-panel">${esc(r.name)}</h2>
+  <div class="sub">Разделочная доска · ${s.usedNames.join(', ')}</div>
+  <div class="sub">Набивай шкалу слайсами и остановись около 100%.</div>
+  <div class="row">${bar(s.doneness, 100, 'done', `Нарезка ${Math.round(s.doneness)}%`)}</div>
+  <div class="hint">${esc(s.hint)}</div>
+  <div class="rowbtns">
+    ${btn('cook_slice', 'Нарезать (F)', '', 'primary')}
+    ${btn('cook_finish', 'Подавать (Enter)', '', 'primary')}
+    ${btn('cook_abort', 'Бросить (Esc)', '', 'danger')}
+  </div>`;
+}
+
+function mixPanel(g: Game) {
+  const s = g.cook!, r = s.recipe;
+  const next = s.mixPhase === 'stir' ? 'Помешать' : 'Выдержать';
+  return `<h2 data-tutorial="cook-panel">${esc(r.name)}</h2>
+  <div class="sub">Алхимический стол · ${s.usedNames.join(', ')}</div>
+  <div class="sub">Чередуй «Помешать» и «Выдержать». Сейчас: ${next}.</div>
+  <div class="row">${bar(s.doneness, 100, 'done', `Реакция ${Math.round(s.doneness)}%`)}</div>
+  <div class="row">${bar(s.stability, 100, 'skill', `Стабильность ${Math.round(s.stability)}%`)}</div>
+  <div class="hint">${esc(s.hint)}</div>
+  <div class="rowbtns">
+    ${btn('cook_stir', 'Помешать (F)', '', s.mixPhase === 'stir' ? 'primary' : '')}
+    ${btn('cook_wait', 'Выдержать (Пробел)', '', s.mixPhase === 'rest' ? 'primary' : '')}
+    ${btn('cook_finish', 'Подавать (Enter)', '', 'primary')}
+    ${btn('cook_abort', 'Бросить (Esc)', '', 'danger')}
+  </div>`;
+}
+
 function servePanel(g: Game) {
   const act = g.orders.filter(o => o.state === 'active');
   const dishes = g.player.inv.map((it, i) => ({ it, i })).filter(x => x.it.kind === 'dish');
   // Авто-выбор первого активного заказа, если ничего не выбрано или выбран закрытый
   if (!act.find(x => x.id === sel.order)) sel.order = act.length ? act[0].id : -1;
   const o = g.orders.find(x => x.id === sel.order);
-  return `<h2>Стойка выдачи</h2>
+  return `<h2 data-tutorial="serve-panel">Стойка выдачи</h2>
   <div class="cols">
     <div><h3>Заказы</h3>${act.map(x => `<button class="rowitem ${x.id === sel.order ? 'on' : ''}" data-act="serve_pick" data-arg="${x.id}">
       <b>${esc(x.cust.name)}</b><span>${esc(x.recipe.name)}</span><span class="dim">кач. ${x.minQuality}+ · ${x.deadline - g.turn} ход.</span></button>`).join('') || '<div class="empty">Заказов нет.</div>'}</div>
@@ -350,7 +500,7 @@ function shopPanel(g: Game) {
   const tools = toolStock(g);
   return `<h2>Лавка Зага</h2><div class="sub">Цены ходят за спросом: скупай в затишье, продавай в наплыв.</div>
   <div class="cols">
-    <div><h3>Купить</h3>
+    <div data-tutorial="shop-buy"><h3>Купить</h3>
       ${stock.map(i => `<button class="rowitem" data-act="buy" data-arg="${i.id}"><b>${esc(i.name)}</b><span>${g.market.buyPrice(i.id)}💰</span>
         <span class="dim">спрос ${(g.market.rows[i.id].demand).toFixed(2)}</span></button>`).join('')}
       ${tools.map(t => `<button class="rowitem" data-act="buytool" data-arg="${t.id}"><b>${esc(t.name)}</b><span>${t.price}💰</span>
@@ -417,8 +567,9 @@ function startScreen() {
   return `<div class="scrim start"><div class="panel">
     <h1>HELL<span>CHEF</span></h1>
     <div class="tag">Кулинарный рогалик. Ты готовишь для демонов, потому что альтернатива — быть поданным.</div>
-    <div class="rowbtns">${ARCHETYPES.map(a => `<button class="btn primary tall" data-act="newgame" data-arg="${a.id}"><b>${a.name}</b><span>${a.desc}</span></button>`).join('')}</div>
+    <div class="rowbtns" data-tutorial="new-game">${ARCHETYPES.map(a => `<button class="btn primary tall" data-act="newgame" data-arg="${a.id}"><b>${a.name}</b><span>${a.desc}</span></button>`).join('')}</div>
     ${hasSave() ? `<div class="rowbtns">${btn('continue', 'Продолжить сохранение')}</div>` : ''}
     <div class="sub">WASD — ходить · E — действие · I — сумка · C — герой · R — рецепты · F5 — сохранить</div>
+    <div class="rowbtns"><button class="btn mini" data-act="tutorial_toggle" data-tutorial="hint-toggle">Подсказки: ${app.g?.tutorial.enabled ? 'включены' : 'выключены'}</button></div>
   </div></div>`;
 }
